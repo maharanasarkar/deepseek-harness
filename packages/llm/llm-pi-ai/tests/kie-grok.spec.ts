@@ -15,7 +15,13 @@ beforeEach(() => {
   vi.stubEnv('KIE_API_KEY', 'test-key')
 })
 
-/** Kie Grok route shape: nested per-family baseURL under openai-responses. */
+/** Kie Grok route shape: nested per-family baseURL under openai-responses.
+ *
+ * Kie has no true "off" (minimum effort is low, omitted defaults to low),
+ * while pi-ai sends effort "none" for an unspelled off, which Kie rejects.
+ * The profile therefore defaults every effort-less request to low and spells
+ * off as low.
+ */
 function kieProviders(baseURL: string): Record<string, LlmPiAi.PiAiProviderProfile> {
   return {
     'kie-grok': {
@@ -23,11 +29,12 @@ function kieProviders(baseURL: string): Record<string, LlmPiAi.PiAiProviderProfi
       apiKeyEnv: 'KIE_API_KEY',
       api: 'openai-responses',
       baseURL,
+      reasoning: 'low',
       models: [{
         id: 'grok-4-7',
         name: 'Grok 4.7 (Kie)',
         contextWindow: 500000,
-        reasoningEfforts: { off: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+        reasoningEfforts: { off: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
       }],
     },
   }
@@ -73,5 +80,28 @@ describe('kie-grok gateway route', () => {
     expect(result.message.content).toEqual([{ type: 'text', text: 'Hello' }])
     expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 })
     expect(result.finish).toEqual({ kind: 'stop' })
+  })
+
+  it('defaults effort-less requests to low, never pi-ai’s "none"', async () => {
+    const server = await mockServer([{ rawFrames: kieFrames }, { rawFrames: kieFrames }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, { providers: kieProviders(`${server.url}/grok/v1`) })
+    for (const effort of [undefined, ReasoningEffortId('off')] as const) {
+      const result = await assemble(ctx, {
+        provider: 'kie-grok',
+        model: 'grok-4-7',
+        ...effort === undefined ? {} : { reasoningEffort: effort },
+        messages: [createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })],
+      })
+      expect(result.finish).toEqual({ kind: 'stop' })
+    }
+    const bodies = server.requests as Record<string, unknown>[]
+    expect(bodies).toHaveLength(2)
+    for (const body of bodies) {
+      // The profile default and the explicit off both land on Kie-legal low;
+      // pi-ai's unspelled-off "none" must never reach the wire.
+      expect((body['reasoning'] as { effort?: string })?.effort).toBe('low')
+    }
   })
 })
