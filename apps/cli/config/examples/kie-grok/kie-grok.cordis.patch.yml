@@ -1,0 +1,42 @@
+# Kie AI Grok provider overlay: serve grok-4-7 through a hand-declared
+# `kie-grok` route and start new sessions on it.
+#
+# Kie publishes one base URL per model family, so this route covers only Grok
+# (requests go to {baseURL}/responses). A sibling route with its own baseURL
+# serves each further family. One route also speaks one wire protocol.
+#
+# Use: pnpm dsh web --patch apps/cli/config/examples/kie-grok/kie-grok.cordis.patch.yml
+# The key itself never enters this file: export KIE_API_KEY in the launching
+# shell or store it through Settings → Models, which writes the managed
+# credential document the reference resolves from per request.
+#
+# Kie accepts only concrete reasoning levels (low/medium/high/xhigh) and has
+# no true "off": omitted reasoning defaults to low server-side, while pi-ai
+# sends effort "none" for an unspelled off on Responses-protocol routes, which
+# Kie refuses. The route therefore defaults effort-less requests to low and
+# spells off as low (Kie minimum) instead of leaving it empty.
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      kie-grok:
+        displayName: Kie Grok
+        apiKeyEnv: KIE_API_KEY
+        api: openai-responses
+        baseURL: https://api.kie.ai/grok/v1
+        reasoning: low
+        models:
+          - id: grok-4-7
+            name: Grok 4.7 (Kie)
+            contextWindow: 500000
+            reasoningEfforts:
+              off: low
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: kie-grok
+    model: grok-4-7

@@ -152,6 +152,30 @@ DeepSeek 将省略的 `inputModalities` 视为纯文本，并拒绝空列表。�
     reasoningEffort: max
 ```
 
+在 `openai-responses` 路由上，上述留空 `off` 的规则不适用：pi-ai 会为推理模型始终发送推理字段，把留空的 `off` 写作 effort `none`，而只接受具体等级的网关会以 `INVALID_REQUEST` 拒绝。没有真正关闭档位的网关（例如 Kie AI）需要把路由默认值设为具体等级，并把 `off` 写成该等级（即其最低档）：
+
+```yaml
+- id: llm-pi-ai
+  config:
+    providers:
+      kie-grok:
+        apiKeyEnv: KIE_API_KEY
+        api: openai-responses
+        baseURL: https://api.kie.ai/grok/v1
+        reasoning: low
+        models:
+          - id: grok-4-7
+            contextWindow: 500000
+            reasoningEfforts:
+              off: low
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+```
+
+该路由的完整可用 overlay（含新会话默认值）位于 `apps/cli/config/examples/kie-grok/kie-grok.cordis.patch.yml`；用 `pnpm dsh web --patch apps/cli/config/examples/kie-grok/kie-grok.cordis.patch.yml` 启动，并在启动 shell 中导出 `KIE_API_KEY`。
+
 ### 请求兼容性
 
 网关可能持有可用的密钥、地址也通得到，却仍然拒绝每一个请求。pi-ai 依据端点的 URL 决定请求的形状——系统提示词由哪个角色承载、输出上限写在哪个字段、思考级别如何传输——而对于它无法识别的地址，会当作 OpenAI 本身来对待。多数 OpenAI 兼容网关至少会拒绝 OpenAI 所接受的某一样东西。
@@ -199,6 +223,8 @@ DeepSeek 将省略的 `inputModalities` 视为纯文本，并拒绝空列表。�
 - **只有推理模型失败**：pi-ai 把它们的系统提示词以 `developer` 角色发出，而网关拒绝该角色。设 `compat.supportsDeveloperRole: false`。
 - **手动录入的模型没有推理等级菜单**：该模型没有声明任何等级。在 `cordis.patch.yml` 中给该模型加上 `reasoningEfforts`。
 - **`off` 无法让 DeepSeek 模型停止思考**：留空的 `off` 不发送任何推理字段，默认思考的端点就继续思考。请在模型或路由上设置 `compat.thinkingFormat: deepseek`。
+- **Responses 协议请求因 `reasoning_effort` 被拒绝**：路由为留空的 `off` 发送了 effort `none`。请把路由的 `reasoning` 设为具体等级，并把 `off` 写成该等级的写法（Kie AI：`reasoning: low` 配合 `off: low`）。
+- **网关为每个模型系列提供各自的 base URL**：每个 base URL 注册一个提供商；一个路由只持有一个端点，因此 Kie AI 的每个系列需要一个平行的路由。
 - **某个 compat 开关因没有值而被拒绝**：冒号后什么都没写。给它一个值，或删掉该键以沿用已安装 catalog 的值。
 - **图片在发送前被拒绝**：该模型未声明图片模态。请给自定义提供商的模型加上 `input: [text, image]`；在 DeepSeek 自身的路由上，请从配置的目录中选择支持图片的条目（默认为 `deepseek-flash`），并确认网关提供该模型且支持图片输入。
 - **提供商拒绝了带图片的请求**：该模型声明了其端点实际并不提供的图片能力。请从授予它图片能力的那个列表中移除 `image`——可能是模型的 `input`，也可能是路由的 `defaultInput`——然后开启新会话：附加的图片会留在会话日志里，因此在会话离开它之前，同一个请求会不断重复。
