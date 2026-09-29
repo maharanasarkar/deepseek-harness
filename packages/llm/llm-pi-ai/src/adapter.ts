@@ -111,6 +111,31 @@ export interface PiAiAuthInjection {
   authContext: AuthContext
 }
 
+/** Wire protocols whose requests pi-ai decorates with a reasoning summary. */
+const RESPONSES_APIS: readonly string[] = ['openai-responses', 'azure-openai-responses', 'openai-codex-responses']
+
+/**
+ * Sampling override dropping pi-ai's automatic reasoning summary for one
+ * request. pi-ai sends `summary: "auto"` beside every explicit effort on
+ * Responses-protocol routes; endpoints that accept the effort but refuse the
+ * summary fail the whole request. The override re-states the mapped effort
+ * alone — pi-ai applies sampling params after its own fields — and leaves
+ * `include` untouched, so replay continuity is preserved.
+ * @param model - the resolved route/model descriptor carrying the wire map.
+ * @param reasoning - the validated level for this request, if thinking.
+ * @param omit - the route's `omitReasoningSummary` switch.
+ * @returns the sampling override, or nothing when the request needs none.
+ */
+function reasoningSummaryOverride(
+  model: Model<Api>,
+  reasoning: ModelThinkingLevel | undefined,
+  omit: boolean | undefined,
+): { samplingParams?: Record<string, unknown> } {
+  if (omit !== true || reasoning === undefined || reasoning === 'off') return {}
+  if (!RESPONSES_APIS.includes(model.api)) return {}
+  return { samplingParams: { reasoning: { effort: model.thinkingLevelMap?.[reasoning] ?? reasoning } } }
+}
+
 /** Copy profile stream knobs into pi-ai's common option vocabulary. */
 function profileOptions(
   profile: ResolvedPiAiProviderProfile,
@@ -379,6 +404,7 @@ export class PiAiAdapter extends LlmAdapter {
         }, onReplayDegrade)
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
+        ...reasoningSummaryOverride(model, reasoning, profile.omitReasoningSummary),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

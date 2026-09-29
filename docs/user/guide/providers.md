@@ -145,12 +145,37 @@ An `off` left empty sends nothing, which only stops a model that thinks on reque
 ```
 
 A built-in provider's model whose gateway does not reason loses its levels with `reasoningEfforts: false` under `modelOverrides`; selecting an effort for it is then refused as `UNSUPPORTED_REASONING_EFFORT`. DeepSeek's own route needs none of this: its models already offer `off`, `low`, `high`, and `max`, and `llm-deepseek.reasoningEffort` sets the default the picker starts from:
-
 ```yaml
 - id: llm-deepseek
   config:
     reasoningEffort: max
 ```
+
+On an `openai-responses` route the empty-`off` rule above does not apply: pi-ai always sends a reasoning field for a reasoning model, spelling an empty `off` as effort `none`, which gateways that accept only concrete levels refuse with `INVALID_REQUEST`. A gateway with no true off level, such as Kie AI's Grok endpoints, needs the route default set to a concrete level and `off` spelled as that level (its minimum):
+
+```yaml
+- id: llm-pi-ai
+  config:
+    providers:
+      kie-grok:
+        apiKeyEnv: KIE_API_KEY
+        api: openai-responses
+        baseURL: https://api.kie.ai/grok/v1
+        reasoning: low
+        models:
+          - id: grok-4-7
+            contextWindow: 500000
+            reasoningEfforts:
+              off: low
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+```
+
+A complete working overlay for this route, including the new-session default, lives at `apps/cli/config/examples/kie-grok/kie-grok.cordis.patch.yml`; launch it with `pnpm dsh web --patch apps/cli/config/examples/kie-grok/kie-grok.cordis.patch.yml` and export `KIE_API_KEY` in the launching shell.
+
+When the endpoint accepts the effort but refuses pi-ai's automatic `summary: "auto"` beside it — Kie AI's DeepSeek endpoint answers `Upstream service error` — set `omitReasoningSummary: true` on the route: the request then carries the mapped effort alone while keeping the encrypted-content include that replay needs.
 
 ### Request compatibility
 
@@ -199,6 +224,9 @@ Every switch, its accepted values, and the protocols that take it are listed und
 - **Only reasoning models fail** — pi-ai sends their system prompt as the `developer` role, which the gateway rejects. Set `compat.supportsDeveloperRole: false`.
 - **The Effort menu does not appear for a model you entered by hand** — It declares no levels. Add `reasoningEfforts` to the model in `cordis.patch.yml`.
 - **`off` does not stop a DeepSeek model from thinking** — An empty `off` sends no reasoning field at all, and an endpoint that thinks by default keeps thinking. Set `compat.thinkingFormat: deepseek` on the model or the route.
+- **A Responses-protocol request fails naming `reasoning_effort`** — The route sent effort `none` for an empty `off`. Set the route's `reasoning` to a concrete level and give `off` that level's spelling (Kie AI's Grok endpoints: `reasoning: low` with `off: low`).
+- **A Responses-protocol gateway answers `Upstream service error` although the effort is valid** — It refuses pi-ai's automatic reasoning summary. Set `omitReasoningSummary: true` on the route.
+- **A gateway serves each model family under its own base URL** — Register one provider per base URL; a route holds a single endpoint, so Kie AI needs a sibling route per family.
 - **A compat switch is refused as having no value** — A key written with nothing after the colon. Give it a value, or remove the key to keep the installed catalog's.
 - **An image is refused before sending** — The model declares no image modality. Give a custom provider's model `input: [text, image]`; on DeepSeek's own route, select an image-capable entry from the configured catalog (`deepseek-flash` by default) and confirm that your gateway serves that model with image input.
 - **The provider rejects a request carrying an image** — The model declares images its endpoint does not actually serve. Remove `image` from whichever list granted it — the model's `input`, or the route's `defaultInput` — then start a new session: the attached image stays in the session log, so the same request repeats until the session moves off it.

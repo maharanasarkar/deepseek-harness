@@ -81,6 +81,7 @@ kind: "package-reference"
 | `models` | 已安装目录 | 整体替换路由目录；每个条目从已安装模型取默认值 |
 | `modelOverrides` | 无 | 重塑个别已安装目录模型，而不替换其余模型 |
 | `compat` | 目录检测 | 无法识别端点的协议兼容开关 |
+| `omitReasoningSummary` | 无 | 在 Responses 协议请求上只发送映射后的 effort，不带 pi-ai 自动附加的 summary |
 | `defaultContextWindow` | `262,144` | 未描述模型的容量回退 |
 | `defaultMaxTokens` | `32,768` | 未描述模型的输出上限回退 |
 | `requestImagePixelBudget` | `4,194,304` | 每张确定性请求图片的总像素预算 |

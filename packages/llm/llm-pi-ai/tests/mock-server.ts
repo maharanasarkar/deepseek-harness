@@ -29,6 +29,8 @@ export const textEvents = [
 export async function mockServer(script: {
   status?: number
   events?: string[]
+  /** Verbatim SSE lines (e.g. `event:` + `data:` pairs); written as-is. */
+  rawFrames?: string[]
   body?: string
   delayMs?: number
   headers?: Record<string, string>
@@ -61,6 +63,10 @@ export async function mockServer(script: {
         return
       }
       response.writeHead(200, { 'content-type': 'text/event-stream' })
+      if (behavior.rawFrames !== undefined) {
+        response.end(`${behavior.rawFrames.join('\n')}\n`)
+        return
+      }
       let index = 0
       const writeNext = (): void => {
         const event = behavior.events?.[index++]

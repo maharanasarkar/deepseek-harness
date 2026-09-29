@@ -81,6 +81,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `models` | installed catalog | Replaces the route's catalog wholesale; each entry defaults from the installed model |
 | `modelOverrides` | none | Reshapes individual installed-catalog models without replacing the rest |
 | `compat` | catalog detection | Wire-compatibility switches for unrecognized endpoints |
+| `omitReasoningSummary` | absent | Sends the mapped effort without pi-ai's automatic summary on Responses-protocol requests |
 | `defaultContextWindow` | `262,144` | Capacity fallback for undescribed models |
 | `defaultMaxTokens` | `32,768` | Output-cap fallback for undescribed models |
 | `requestImagePixelBudget` | `4,194,304` | Total-pixel budget for each deterministic request image |

@@ -240,6 +240,54 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/v1/responses'])
   })
 
+  it('omits the reasoning summary on Responses routes that refuse it', async () => {
+    const events = [
+      '{"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":[]}}',
+      '{"type":"response.output_text.delta","output_index":0,"delta":"hello"}',
+      '{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}',
+    ]
+    const server = await mockServer([{ events }, { events }])
+    const mount = async (omit: boolean): Promise<Context> => {
+      const ctx = new Context()
+      await ctx.plugin(LlmRuntime)
+      await ctx.plugin(LlmPiAi, {
+        providers: {
+          'acme-responses': {
+            apiKeyEnv: 'PI_TEST_KEY',
+            api: 'openai-responses',
+            baseURL: `${server.url}/v1`,
+            models: [{ id: 'acme-think', reasoningEfforts: { low: 'low', high: 'high' } }],
+            ...omit ? { omitReasoningSummary: true } : {},
+          },
+        },
+      })
+      return ctx
+    }
+    const flagged = await mount(true)
+    const plain = await mount(false)
+    const stream = async (ctx: Context): Promise<Record<string, unknown>> => {
+      const result = await assemble(ctx, {
+        provider: 'acme-responses',
+        model: 'acme-think',
+        reasoningEffort: ReasoningEffortId('low'),
+        messages: [],
+      })
+      expect(result.finish).toEqual({ kind: 'stop' })
+      return server.requests[server.requests.length - 1] as Record<string, unknown>
+    }
+    // The switch re-states the mapped effort alone; the encrypted-content
+    // include survives, so replay continuity is preserved.
+    const flaggedBody = await stream(flagged)
+    expect(flaggedBody).toMatchObject({
+      reasoning: { effort: 'low' },
+      include: ['reasoning.encrypted_content'],
+    })
+    expect(flaggedBody['reasoning']).not.toHaveProperty('summary')
+    // Without the switch pi-ai keeps its automatic summary.
+    expect(await stream(plain)).toMatchObject({ reasoning: { effort: 'low', summary: 'auto' } })
+    expect(server.paths).toEqual(['/v1/responses', '/v1/responses'])
+  })
+
   it('resolves attachment and filesystem services mounted after the adapter when dispatching an image', async () => {
     const server = await mockServer([{ status: 401, body: JSON.stringify({ error: { message: 'expected mock failure' } }) }])
     const attachmentId = AttachmentId(`sha256:${'a'.repeat(64)}`)

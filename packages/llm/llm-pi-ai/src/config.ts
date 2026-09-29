@@ -152,6 +152,13 @@ export interface PiAiProviderProfile {
   headers?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
+  /**
+   * Drop pi-ai's automatic reasoning summary on Responses-protocol requests.
+   * pi-ai sends `summary: "auto"` beside every explicit effort, which
+   * endpoints that accept the effort but not the summary refuse; when set,
+   * the request carries the mapped effort alone. Inert on other protocols.
+   */
+  omitReasoningSummary?: boolean
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
   /** Prompt-cache retention preference. */
@@ -336,6 +343,7 @@ const profile = z.object({
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
   headers: z.dict(z.string()),
   reasoning: z.union(THINKING_LEVELS),
+  omitReasoningSummary: z.boolean(),
   thinkingBudgets,
   cacheRetention: z.union(['none', 'short', 'long']),
   transport: z.union(['sse', 'websocket', 'websocket-cached', 'auto']),
